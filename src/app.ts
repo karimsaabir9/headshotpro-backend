@@ -2,6 +2,7 @@ import cookieParser from "cookie-parser";
 import express from "express";
 import cors from "cors";
 import { config } from "./config";
+import v1Routers from "./routes/v1";
 
 const app = express();
 
@@ -28,6 +29,10 @@ app.get("/health", (req, res) => {
 });
 
 // TODO: Routes
+
+app.use("/api/v1", v1Routers);
+
+
 // TODO: 404 Route
 // TODO: Error Handling
 
