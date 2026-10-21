@@ -3,13 +3,13 @@ import { register } from "@/controllers";
 import { registerSchema } from "@/validators/auth.validator";
 import { validate } from "@/middleware/validation.middleware";
 
-const router = Router();
+const authRouter = Router();
 
-router.post("/register", validate(registerSchema), register);
-router.get("/logout", (req, res) => {
+authRouter.post("/register", validate(registerSchema), register);
+authRouter.get("/logout", (req, res) => {
   res.json({
     massage: "logged out",
   });
 });
 
-export default router;
+export default authRouter;

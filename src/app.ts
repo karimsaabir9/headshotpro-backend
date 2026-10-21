@@ -4,6 +4,7 @@ import cors from "cors";
 import { config } from "./config";
 import v1Routers from "./routes/v1";
 import { errorMiddleware } from "./middleware/error.middleware";
+import { errorResponse } from "./util/response";
 
 const app = express();
 
@@ -33,7 +34,7 @@ app.get("/health", (req, res) => {
   res.json({
     status: "ok",
     timeStamp: new Date().toISOString(),
-  });
+  }); 
 });
 
 // TODO: Routes
@@ -41,6 +42,12 @@ app.get("/health", (req, res) => {
 app.use("/api/v1", v1Routers);
 
 // TODO: 404 Route
+app.use((req, res) => {
+  return errorResponse(res, "Route not found", 404, [
+    { path: req.originalUrl, message: "Route not found" },
+  ]);
+});
+
 // TODO: Error Handling
 app.use(errorMiddleware);
 
