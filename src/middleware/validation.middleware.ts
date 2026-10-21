@@ -1,6 +1,7 @@
 import { z, ZodError } from "zod";
 import { Request, Response, NextFunction } from "express";
 import { logger } from "@/util/logger";
+import { AppError, ValidationError } from "@/util/errors";
 
 export const validate = (schema: z.ZodType<any>) => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -17,10 +18,9 @@ export const validate = (schema: z.ZodType<any>) => {
           message: issue.message,
         }));
         logger.error("Validation error", errors);
-        next(errors);
+        next(new ValidationError("Validation error", errors));
       } else {
-        logger.error("Unknown error", (error as Error).message);
-        next(error);
+        next(new AppError("Validation error", 400));
       }
     }
   };
