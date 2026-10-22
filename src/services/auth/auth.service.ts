@@ -2,7 +2,9 @@ import { IUser, User } from "@/util/User.model";
 import { registerInput } from "@/validators/auth.validator";
 import { passwordService } from "./password.service";
 import { verificationService } from "./verification.service";
-import { ConflictError } from "@/util/errors";
+import { ConflictError, ExternalServiceError } from "@/util/errors";
+import { emailService } from "../notification/email.service";
+import { logger } from "@/util/logger";
 
 export class AuthService {
   //register user
@@ -34,6 +36,22 @@ export class AuthService {
       emailVerificationExpires: verificationTokenExpires,
       isEmailVerified: false,
     });
+
+    // Send verification email
+
+    try {
+      await emailService.sendVerificationEmail(
+        normalizedEmail,
+        input.name,
+        verificationToken,
+      );
+    } catch (error) {
+      logger.error("Error sending verification email", error);
+      throw new ExternalServiceError(
+        "Email Service",
+        "Failed to send verification email",
+      );
+    }
 
     return {
       user,
