@@ -1,7 +1,7 @@
 import { IUser, User } from "@/util/User.model";
 import { registerInput } from "@/validators/auth.validator";
 import { passwordService } from "./password.service";
-import { verificationService } from "./verfication.service";
+import { verificationService } from "./verification.service";
 import { ConflictError } from "@/util/errors";
 
 export class AuthService {
@@ -19,7 +19,7 @@ export class AuthService {
     //hash password
     const hashedPassword = await passwordService.hashPassword(input.password);
 
-    // generate verfication token
+    // generate verification token
     const verificationToken = verificationService.generateToken();
     const verificationTokenExpires =
       verificationService.generateExpirationDate();
