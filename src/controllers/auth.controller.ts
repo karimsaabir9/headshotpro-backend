@@ -1,8 +1,16 @@
 import { authService } from "@/services";
+import { createdResponse } from "@/util/response";
 import type { Request, Response } from "express";
 
 export const register = async (req: Request, res: Response) => {
   // service call
-  const result = await authService.registerUser("Hi there");
-  res.json(result);
+  const { user } = await authService.registerUser(req.body);
+  return createdResponse(res, "User registered successfully", {
+    user: {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+      isEmailVerified: user.isEmailVerified,
+    },
+  });
 };
