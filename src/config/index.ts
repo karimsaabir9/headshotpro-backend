@@ -12,13 +12,13 @@ export const config = {
     process.env.NODE_ENV === "production"
       ? process.env.FRONTEND_URL
       : "http://localhost:3000",
-  // Email configuration
+  // Email configuration (never hardcode credentials — set these in .env)
   email: {
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: parseInt(process.env.SMTP_PORT || "587", 10),
     secure: process.env.SMTP_SECURE === "true",
-    user: process.env.SMTP_USER || "karimsapir9@gmail.com",
-    password: process.env.SMTP_PASSWORD || "isaglumtnpfwnnow",
-    from: process.env.EMAIL_FROM || "karimsapir9@gmail.com",
+    user: process.env.SMTP_USER || "",
+    password: process.env.SMTP_PASSWORD || "",
+    from: process.env.EMAIL_FROM || "",
   },
 };
