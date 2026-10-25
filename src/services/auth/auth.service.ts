@@ -61,10 +61,8 @@ export class AuthService {
     // verify email
 
     async verifyEmail(token: string): Promise<void> {
-      // Find user with verfictaion token
-  
-      console.log("verifctaion", token);
-  
+      // Find user with verification token
+
       const user = await User.findOne({
         emailVerificationToken: token,
       }).select("+emailVerificationToken +emailVerificationExpires");
@@ -81,10 +79,10 @@ export class AuthService {
         throw new ValidationError("Verification token has expired");
       }
   
-      // Check if alredy verified
-  
+      // Check if already verified
+
       if (user.isEmailVerified) {
-        throw new ConflictError("Email alredy verified");
+        throw new ConflictError("Email already verified");
       }
   
       // Verify email
