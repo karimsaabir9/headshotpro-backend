@@ -5,85 +5,103 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       line-height: 1.6;
-      color: #333;
+      color: #3d3a2e;
       margin: 0;
       padding: 0;
-      background-color: #f4f4f4;
+      background-color: #faf9f5;
+    }
+    .email-outer {
+      padding: 32px 16px;
     }
     .email-wrapper {
       max-width: 600px;
       margin: 0 auto;
       background-color: #ffffff;
+      border: 1px solid #e8e5dc;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(61, 58, 46, 0.08);
     }
     .email-header {
-      background-color: #23d875;
-      padding: 20px;
+      background-color: #c96442;
+      background-image: linear-gradient(135deg, #c96442 0%, #b5542f 100%);
+      padding: 36px 24px;
       text-align: center;
     }
     .email-header h1 {
       color: #ffffff;
       margin: 0;
       font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
     }
     .email-body {
-      padding: 30px;
+      padding: 36px 40px;
     }
     .email-body h2 {
-      color: #333;
-      font-size: 20px;
+      color: #3d3a2e;
+      font-size: 22px;
+      font-weight: 700;
       margin-top: 0;
+      margin-bottom: 16px;
     }
     .email-body p {
-      margin: 15px 0;
+      margin: 16px 0;
+      color: #504d40;
+      font-size: 15px;
     }
     .button {
       display: inline-block;
-      padding: 12px 24px;
-      background-color: #23d875;
+      padding: 14px 32px;
+      background-color: #c96442;
       color: #ffffff !important;
       text-decoration: none;
-      border-radius: 5px;
-      margin: 20px 0;
-      font-weight: bold;
+      border-radius: 9px;
+      margin: 24px 0;
+      font-weight: 600;
+      font-size: 15px;
+      box-shadow: 0 2px 6px rgba(201, 100, 66, 0.35);
     }
     .button:hover {
-      background-color: #23d875;
+      background-color: #b5542f;
     }
     .text-muted {
-      color: #666;
-      font-size: 14px;
+      color: #83827b;
+      font-size: 13px;
     }
     .email-footer {
-      background-color: #f8f9fa;
-      padding: 20px;
+      background-color: #f5f3ec;
+      padding: 24px;
       text-align: center;
-      border-top: 1px solid #e9ecef;
+      border-top: 1px solid #e8e5dc;
     }
     .email-footer p {
       margin: 5px 0;
       font-size: 12px;
-      color: #666;
+      color: #83827b;
     }
     .link-url {
       word-break: break-all;
-      color: #23d875;
-      font-size: 12px;
+      color: #c96442;
+      font-size: 13px;
     }
   </style>
 </head>
 <body>
-  <div class="email-wrapper">
-    <div class="email-header">
-      <h1>Headshot Generator</h1>
-    </div>
-    <div class="email-body">
-      {{content}}
-    </div>
-    <div class="email-footer">
-      <p>Best regards,<br>The Headshot Generator Team</p>
-      <p class="text-muted">This is an automated email, please do not reply.</p>
+  <div class="email-outer">
+    <div class="email-wrapper">
+      <div class="email-header">
+        <h1>Headshot Generator</h1>
+      </div>
+      <div class="email-body">
+        {{content}}
+      </div>
+      <div class="email-footer">
+        <p>Best regards,<br>The Headshot Generator Team</p>
+        <p class="text-muted">This is an automated email, please do not reply.</p>
+      </div>
     </div>
   </div>
 </body>
