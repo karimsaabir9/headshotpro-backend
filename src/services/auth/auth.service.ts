@@ -2,7 +2,7 @@ import { IUser, User } from "@/util/User.model";
 import { registerInput } from "@/validators/auth.validator";
 import { passwordService } from "./password.service";
 import { verificationService } from "./verification.service";
-import { ConflictError, ExternalServiceError } from "@/util/errors";
+import { ConflictError, ExternalServiceError, ValidationError } from "@/util/errors";
 import { emailService } from "../notification/email.service";
 import { logger } from "@/util/logger";
 
@@ -57,6 +57,44 @@ export class AuthService {
       user,
     };
   }
+
+    // verify email
+
+    async verifyEmail(token: string): Promise<void> {
+      // Find user with verfictaion token
+  
+      console.log("verifctaion", token);
+  
+      const user = await User.findOne({
+        emailVerificationToken: token,
+      }).select("+emailVerificationToken +emailVerificationExpires");
+  
+      if (!user) {
+        throw new ValidationError("Invalid verification token");
+      }
+      // Check if the token Expired
+  
+      if (
+        !user.emailVerificationExpires ||
+        new Date() > user.emailVerificationExpires
+      ) {
+        throw new ValidationError("Verification token has expired");
+      }
+  
+      // Check if alredy verified
+  
+      if (user.isEmailVerified) {
+        throw new ConflictError("Email alredy verified");
+      }
+  
+      // Verify email
+  
+      user.isEmailVerified = true;
+      user.emailVerificationExpires = undefined;
+      user.emailVerificationToken = undefined;
+  
+      await user.save();
+    }
 
   private async checkUSerExists(email: string): Promise<void> {
     const existingUser = await User.findOne({ email });

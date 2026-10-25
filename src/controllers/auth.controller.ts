@@ -1,5 +1,6 @@
 import { authService } from "@/services";
-import { createdResponse } from "@/util/response";
+import { ValidationError } from "@/util/errors";
+import { createdResponse, successResponse } from "@/util/response";
 import type { Request, Response } from "express";
 
 export const register = async (req: Request, res: Response) => {
@@ -13,4 +14,19 @@ export const register = async (req: Request, res: Response) => {
       isEmailVerified: user.isEmailVerified,
     },
   });
+};
+
+// Verify emnail
+
+export const verifyEmail = async (req: Request, res: Response) => {
+  const { token } = req.query;
+
+  if (!token || typeof token !== "string") {
+    throw new ValidationError("Verification token is required");
+  }
+
+  // verifiction service
+  await authService.verifyEmail(token);
+
+  return successResponse(res, "Email verfied successfully");
 };

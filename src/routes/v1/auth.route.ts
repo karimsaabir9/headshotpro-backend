@@ -1,15 +1,15 @@
 import { Router } from "express";
-import { register } from "@/controllers";
-import { registerSchema } from "@/validators/auth.validator";
-import { validate } from "@/middleware/validation.middleware";
+import { authController } from "@/controllers";
+import { registerSchema, verifyEmailSchema } from "@/validators/auth.validator";
+import { validate, validateQuery } from "@/middleware/validation.middleware";
 
 const authRouter = Router();
 
-authRouter.post("/register", validate(registerSchema), register);
-authRouter.get("/logout", (req, res) => {
-  res.json({
-    massage: "logged out",
-  });
-});
+authRouter.post("/register", validate(registerSchema), authController.register);
+authRouter.get(
+  "/verify-email",
+  validateQuery(verifyEmailSchema),
+  authController.verifyEmail,
+);
 
 export default authRouter;
