@@ -30,3 +30,18 @@ export const verifyEmail = async (req: Request, res: Response) => {
 
   return successResponse(res, "Email verfied successfully");
 };
+
+export const resendVerificationEmail = async (req: Request, res: Response) => {
+  const { email } = req.body;
+
+  if(!email){
+    throw new ValidationError("Email is required");
+  }
+
+  // Resend service
+await authService.resendVerificationEmail(email);
+
+  return successResponse(res, "Verification email sent successfully");
+
+
+}

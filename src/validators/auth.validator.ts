@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { email, z } from "zod";
 
 export const registerSchema = z.object({
   email: z.email({ error: "Invalid email address" }).trim().toLowerCase(),
@@ -18,6 +18,10 @@ export const registerSchema = z.object({
 export const verifyEmailSchema = z.object({
   token: z.string({ error: 'Verification token is required' }).min(1),
 });
+export const resendVerificationSchema = z.object({
+  email: z.email({ error: 'Email is required' }).trim().toLowerCase(),
+});
 
 export type registerInput = z.infer<typeof registerSchema>;
 export type verifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type resendVerificationInput = z.infer<typeof resendVerificationSchema>;

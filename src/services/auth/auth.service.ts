@@ -94,6 +94,33 @@ export class AuthService {
       await user.save();
     }
 
+async resendVerificationEmail(email: string): Promise<void> {
+  const normalizedEmail = this.normalizeEmail(email);
+  const user = await User.findOne({ email: normalizedEmail })
+
+  if (!user) {
+    throw new ValidationError("User not found");
+  }
+
+  if (user.isEmailVerified) {
+    throw new ConflictError("Email already verified");
+  }
+
+  //generate new verification token
+  const verificationToken = verificationService.generateToken();
+  const verificationTokenExpires = verificationService.generateExpirationDate();
+
+  user.emailVerificationToken = verificationToken;
+  user.emailVerificationExpires = verificationTokenExpires;
+
+  await user.save();
+
+
+  await emailService.sendVerificationEmail(normalizedEmail, user.name, verificationToken);
+
+}
+
+
   private async checkUSerExists(email: string): Promise<void> {
     const existingUser = await User.findOne({ email });
 

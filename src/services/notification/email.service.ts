@@ -153,7 +153,7 @@ export class EmailService {
 
     const verifctaionUrl = `${config.frontendUrl}/verify-email?token=${token}`;
 
-    await this.sendTemplateEmail(email,'Varify Your Email Address', 'verification', {
+    await this.sendTemplateEmail(email,'Verify Your Email Address', 'verification', {
         name: name || '',
         verificationUrl: verifctaionUrl,
     })
