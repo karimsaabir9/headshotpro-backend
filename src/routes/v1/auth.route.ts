@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authController } from "@/controllers";
 import {
+  loginSchema,
   registerSchema,
   resendVerificationSchema,
   verifyEmailSchema,
@@ -21,5 +22,7 @@ authRouter.post(
   validate(resendVerificationSchema),
   authController.resendVerificationEmail,
 );
+
+authRouter.post("/login", validate(loginSchema), authController.login);
 
 export default authRouter;

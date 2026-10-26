@@ -1,7 +1,16 @@
+import { config } from "@/config";
 import { authService } from "@/services";
 import { ValidationError } from "@/util/errors";
 import { createdResponse, successResponse } from "@/util/response";
 import type { Request, Response } from "express";
+
+const cookieOptions = { 
+  httpOnly: true,
+  secure: config.env === "production",
+  sameSite:  config.env === "production" ? ("none" as const) : ("lax" as const),
+  path: "/",
+  domain: config.env === "production" ? ".mchamouda.store" : undefined, 
+};
 
 export const register = async (req: Request, res: Response) => {
   // service call
@@ -44,4 +53,36 @@ await authService.resendVerificationEmail(email);
   return successResponse(res, "Verification email sent successfully");
 
 
+}
+
+export const login = async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    throw new ValidationError("Email and password are required");
+  }
+
+  // login service
+  const { user, accessToken, refreshToken } = await authService.login(
+    email,
+    password
+  );
+
+  res.cookie("accessToken", accessToken, {
+    ...cookieOptions,
+    maxAge: 15 * 60 * 1000, // 15 minutes
+  });
+
+  res.cookie("refreshToken", refreshToken, {
+    ...cookieOptions,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+
+  return successResponse(res, "Login successful", {
+    user: {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+    },
+  }); 
 }

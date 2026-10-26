@@ -2,9 +2,10 @@ import { IUser, User } from "@/util/User.model";
 import { registerInput } from "@/validators/auth.validator";
 import { passwordService } from "./password.service";
 import { verificationService } from "./verification.service";
-import { ConflictError, ExternalServiceError, ValidationError } from "@/util/errors";
+import { ConflictError, ExternalServiceError, UnAuthorizedError, ValidationError } from "@/util/errors";
 import { emailService } from "../notification/email.service";
 import { logger } from "@/util/logger";
+import { TokenPayload, tokenService } from "./token.service";
 
 export class AuthService {
   //register user
@@ -117,6 +118,54 @@ async resendVerificationEmail(email: string): Promise<void> {
 
 
   await emailService.sendVerificationEmail(normalizedEmail, user.name, verificationToken);
+
+}
+
+async login(email:string, password:string): 
+Promise<{ user: IUser, accessToken: string, refreshToken: string}> {
+  // normalize email to lowercase
+const normalizedEmail = this.normalizeEmail(email);
+  //find user by email
+const user = await User.findOne({ email: normalizedEmail }).select("+password");
+
+if (!user) {
+  throw new UnAuthorizedError("Invalid email or password");
+}
+// is Active
+if (!user.isActive) {
+  throw new UnAuthorizedError("Your account has been deactivated. Please contact support");
+}
+
+// is Email Verified
+if (!user.isEmailVerified) {
+  throw new UnAuthorizedError("Please verify your email to login");
+}
+
+// compare password
+
+const isPasswordValid = await passwordService.comparePassword(password, user.password);
+
+if (!isPasswordValid) {
+  throw new UnAuthorizedError("Invalid email or password");
+}
+
+// generate access token
+const tokenPayload: TokenPayload = {
+  userId: user._id.toString(),
+  email: normalizedEmail,
+}
+
+const {accessToken, refreshToken} = tokenService.generateTokenPair(tokenPayload);
+
+user.refreshToken = refreshToken;
+
+await user.save();
+
+return {
+  user,
+  accessToken,
+  refreshToken,
+}
 
 }
 
