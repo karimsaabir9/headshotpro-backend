@@ -1,8 +1,13 @@
-import { IUser, User } from "@/util/User.model";
+import { IUser, User, UserRole } from "@/models/User.model";
 import { registerInput } from "@/validators/auth.validator";
 import { passwordService } from "./password.service";
 import { verificationService } from "./verification.service";
-import { ConflictError, ExternalServiceError, UnAuthorizedError, ValidationError } from "@/util/errors";
+import {
+  ConflictError,
+  ExternalServiceError,
+  UnAuthorizedError,
+  ValidationError,
+} from "@/util/errors";
 import { emailService } from "../notification/email.service";
 import { logger } from "@/util/logger";
 import { TokenPayload, tokenService } from "./token.service";
@@ -36,6 +41,7 @@ export class AuthService {
       emailVerificationToken: verificationToken,
       emailVerificationExpires: verificationTokenExpires,
       isEmailVerified: false,
+      role: UserRole.USER,
     });
 
     // Send verification email
@@ -59,116 +65,128 @@ export class AuthService {
     };
   }
 
-    // verify email
+  // verify email
 
-    async verifyEmail(token: string): Promise<void> {
-      // Find user with verification token
+  async verifyEmail(token: string): Promise<void> {
+    // Find user with verification token
 
-      const user = await User.findOne({
-        emailVerificationToken: token,
-      }).select("+emailVerificationToken +emailVerificationExpires");
-  
-      if (!user) {
-        throw new ValidationError("Invalid verification token");
-      }
-      // Check if the token Expired
-  
-      if (
-        !user.emailVerificationExpires ||
-        new Date() > user.emailVerificationExpires
-      ) {
-        throw new ValidationError("Verification token has expired");
-      }
-  
-      // Check if already verified
+    const user = await User.findOne({
+      emailVerificationToken: token,
+    }).select("+emailVerificationToken +emailVerificationExpires");
 
-      if (user.isEmailVerified) {
-        throw new ConflictError("Email already verified");
-      }
-  
-      // Verify email
-  
-      user.isEmailVerified = true;
-      user.emailVerificationExpires = undefined;
-      user.emailVerificationToken = undefined;
-  
-      await user.save();
+    if (!user) {
+      throw new ValidationError("Invalid verification token");
+    }
+    // Check if the token Expired
+
+    if (
+      !user.emailVerificationExpires ||
+      new Date() > user.emailVerificationExpires
+    ) {
+      throw new ValidationError("Verification token has expired");
     }
 
-async resendVerificationEmail(email: string): Promise<void> {
-  const normalizedEmail = this.normalizeEmail(email);
-  const user = await User.findOne({ email: normalizedEmail })
+    // Check if already verified
 
-  if (!user) {
-    throw new ValidationError("User not found");
+    if (user.isEmailVerified) {
+      throw new ConflictError("Email already verified");
+    }
+
+    // Verify email
+
+    user.isEmailVerified = true;
+    user.emailVerificationExpires = undefined;
+    user.emailVerificationToken = undefined;
+
+    await user.save();
   }
 
-  if (user.isEmailVerified) {
-    throw new ConflictError("Email already verified");
+  async resendVerificationEmail(email: string): Promise<void> {
+    const normalizedEmail = this.normalizeEmail(email);
+    const user = await User.findOne({ email: normalizedEmail });
+
+    if (!user) {
+      throw new ValidationError("User not found");
+    }
+
+    if (user.isEmailVerified) {
+      throw new ConflictError("Email already verified");
+    }
+
+    //generate new verification token
+    const verificationToken = verificationService.generateToken();
+    const verificationTokenExpires =
+      verificationService.generateExpirationDate();
+
+    user.emailVerificationToken = verificationToken;
+    user.emailVerificationExpires = verificationTokenExpires;
+
+    await user.save();
+
+    await emailService.sendVerificationEmail(
+      normalizedEmail,
+      user.name,
+      verificationToken,
+    );
   }
 
-  //generate new verification token
-  const verificationToken = verificationService.generateToken();
-  const verificationTokenExpires = verificationService.generateExpirationDate();
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ user: IUser; accessToken: string; refreshToken: string }> {
+    // normalize email to lowercase
+    const normalizedEmail = this.normalizeEmail(email);
+    //find user by email
+    const user = await User.findOne({ email: normalizedEmail }).select(
+      "+password",
+    );
 
-  user.emailVerificationToken = verificationToken;
-  user.emailVerificationExpires = verificationTokenExpires;
+    if (!user) {
+      throw new UnAuthorizedError("Invalid email or password");
+    }
+    // is Active
+    if (!user.isActive) {
+      throw new UnAuthorizedError(
+        "Your account has been deactivated. Please contact support",
+      );
+    }
 
-  await user.save();
+    // is Email Verified
+    if (!user.isEmailVerified) {
+      throw new UnAuthorizedError("Please verify your email to login");
+    }
 
+    // compare password
 
-  await emailService.sendVerificationEmail(normalizedEmail, user.name, verificationToken);
+    const isPasswordValid = await passwordService.comparePassword(
+      password,
+      user.password,
+    );
 
-}
+    if (!isPasswordValid) {
+      throw new UnAuthorizedError("Invalid email or password");
+    }
 
-async login(email:string, password:string): 
-Promise<{ user: IUser, accessToken: string, refreshToken: string}> {
-  // normalize email to lowercase
-const normalizedEmail = this.normalizeEmail(email);
-  //find user by email
-const user = await User.findOne({ email: normalizedEmail }).select("+password");
+    // generate access token
+    const tokenPayload: TokenPayload = {
+      userId: user._id.toString(),
+      email: normalizedEmail,
+      role: user.role,
+    };
 
-if (!user) {
-  throw new UnAuthorizedError("Invalid email or password");
-}
-// is Active
-if (!user.isActive) {
-  throw new UnAuthorizedError("Your account has been deactivated. Please contact support");
-}
+    const { accessToken, refreshToken } =
+      tokenService.generateTokenPair(tokenPayload);
 
-// is Email Verified
-if (!user.isEmailVerified) {
-  throw new UnAuthorizedError("Please verify your email to login");
-}
+    user.refreshToken = refreshToken;
 
-// compare password
+    await user.save();
 
-const isPasswordValid = await passwordService.comparePassword(password, user.password);
-
-if (!isPasswordValid) {
-  throw new UnAuthorizedError("Invalid email or password");
-}
-
-// generate access token
-const tokenPayload: TokenPayload = {
-  userId: user._id.toString(),
-  email: normalizedEmail,
-}
-
-const {accessToken, refreshToken} = tokenService.generateTokenPair(tokenPayload);
-
-user.refreshToken = refreshToken;
-
-await user.save();
-
-return {
-  user,
-  accessToken,
-  refreshToken,
-}
-
-}
-
+    return {
+      user,
+      accessToken,
+      refreshToken,
+    };
+  }
 
   private async checkUSerExists(email: string): Promise<void> {
     const existingUser = await User.findOne({ email });
