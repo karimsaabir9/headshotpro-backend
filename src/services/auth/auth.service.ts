@@ -196,6 +196,51 @@ export class AuthService {
     }
     return user;
   }
+
+  
+   //Refresh token service
+   async refreshAccessToken(
+    refreshToken: string
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    // verify refresh token
+
+    const payload = tokenService.verifyRefreshToken(refreshToken);
+
+    // find user by id
+
+    const user = await User.findById(payload.userId).select("+refreshToken");
+
+    if (!user || user.refreshToken !== refreshToken) {
+      throw new UnAuthorizedError("Invalid refresh token");
+    }
+
+    // is Active
+    if (!user.isActive) {
+      throw new UnAuthorizedError(
+        "Your account has been deactivated. Please contact support."
+      );
+    }
+
+    // Generate new access token
+
+    const newPayload: TokenPayload = {
+      userId: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    };
+
+    const tokens = tokenService.generateTokenPair(newPayload);
+
+    user.refreshToken = tokens.refreshToken;
+    await user.save();
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
+  }
+
+
   private async checkUSerExists(email: string): Promise<void> {
     const existingUser = await User.findOne({ email });
 

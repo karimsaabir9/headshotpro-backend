@@ -26,6 +26,6 @@ authRouter.post(
 authRouter.post("/login", validate(loginSchema), authController.login);
 
 authRouter.get("/me", authenticate, authController.getCurrentUser)
-
+authRouter.post('/refresh-token', authController.refreshToken)
 
 export default authRouter;
