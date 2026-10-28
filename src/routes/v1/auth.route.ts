@@ -6,7 +6,7 @@ import {
   resendVerificationSchema,
   verifyEmailSchema,
 } from "@/validators/auth.validator";
-import { validate, validateQuery } from "@/middleware/validation.middleware";
+import { authenticate, validate, validateQuery } from "@/middleware";
 
 const authRouter = Router();
 
@@ -24,5 +24,8 @@ authRouter.post(
 );
 
 authRouter.post("/login", validate(loginSchema), authController.login);
+
+authRouter.get("/me", authenticate, authController.getCurrentUser)
+
 
 export default authRouter;

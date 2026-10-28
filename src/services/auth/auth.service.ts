@@ -5,6 +5,7 @@ import { verificationService } from "./verification.service";
 import {
   ConflictError,
   ExternalServiceError,
+  NotFoundError,
   UnAuthorizedError,
   ValidationError,
 } from "@/util/errors";
@@ -188,6 +189,13 @@ export class AuthService {
     };
   }
 
+  async getCurrentUser(userId: string): Promise<IUser> {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+    return user;
+  }
   private async checkUSerExists(email: string): Promise<void> {
     const existingUser = await User.findOne({ email });
 
