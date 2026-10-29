@@ -1,11 +1,14 @@
+import { paymentController } from "@/controllers";
 import { Router } from "express";
 
 const router = Router();
 
-router.get("/webhook", (req, res) => {
-  res.json({
-    massage: "Webhook received",
-  });
-});
+
+// public routes
+
+router.get('/packages', paymentController.getCreditPackages);
+
+
+
 
 export default router;

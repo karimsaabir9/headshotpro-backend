@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --watch src/server.ts",
     "start": "bun src/server.ts",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "seed:packages": "bun src/scripts/seedCreditPackages.ts"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
