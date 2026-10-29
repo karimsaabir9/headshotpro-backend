@@ -16,7 +16,8 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/nodemailer": "^8.0.2"
+    "@types/nodemailer": "^8.0.2",
+    "@types/stripe": "^8.0.417"
   },
   "peerDependencies": {
     "typescript": "^7"
@@ -31,6 +32,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.11.2",
     "nodemailer": "^10.2.0",
+    "stripe": "^23.0.1",
     "winston": "^3.19.0",
     "zod": "^4.6.7"
   }
