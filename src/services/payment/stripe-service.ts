@@ -45,7 +45,8 @@ export class StripeService {
       // Create session config
 
       const sessionConfig: any = {
-        payment_method_types: ["card"],
+        // payment_method_types is no longer supported; methods are managed in the
+        // Stripe Dashboard (dynamic payment methods) as of the 2026 API.
         mode: "payment",
         line_items: [
           {
