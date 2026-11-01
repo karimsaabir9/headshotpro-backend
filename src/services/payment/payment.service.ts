@@ -237,6 +237,51 @@ export class PaymentService {
       throw new AppError("Failed to process payment");
     }
   }
+
+  async handlePaymentSuccess(
+    orderId: string,
+    source: "STRIPE" | "LOCAL" | "ADMIN" = "STRIPE"
+  ): Promise<void> {
+    try {
+      const order = await Order.findById(orderId);
+
+      if (!order) {
+        logger.warn(`Order not found for order id: ${orderId}`);
+        throw new AppError("Order not found", 404, "ORDER_NOT_FOUND");
+      }
+
+      if (order.creditsAdded) {
+        logger.warn(`Credits already added for order ${orderId}`);
+        throw new AppError(
+          "Credits already added for order",
+          400,
+          "CREDITS_ALREADY_ADDED"
+        );
+      }
+
+      // Integrate Queue for the payment
+      await triggerCreditAddition({
+        orderId: order._id.toString(),
+        userId: order.user.toString(),
+        credits: order.credits,
+        source: source,
+      });
+
+      logger.info(
+        `Credit addition triggered for order ${orderId} with ${order.credits} credits from ${source}`
+      );
+    } catch (error) {
+      logger.error(
+        `Failed to handle payment success for order ${orderId} with credits from ${source}`,
+        error
+      );
+      throw new AppError(
+        "Failed to handle payment success for order",
+        500,
+        "FAILED_TO_HANDLE_PAYMENT_SUCCESS_FOR_ORDER"
+      );
+    }
+  }
 }
 
 export const paymentService = new PaymentService();

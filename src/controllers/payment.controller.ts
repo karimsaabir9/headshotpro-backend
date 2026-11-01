@@ -1,5 +1,5 @@
-import { paymentService } from "@/services/payment";
-import { NotFoundError } from "@/util/errors";
+import { paymentService, stripeService } from "@/services/payment";
+import { AppError, NotFoundError } from "@/util/errors";
 import { logger } from "@/util/logger";
 import { errorResponse, successResponse } from "@/util/response";
 import { Request, Response } from "express";
@@ -33,3 +33,14 @@ export const processPayment = async (req: Request, res: Response) => {
 
     return successResponse(res, paymentResponse.message, paymentResponse);
 }
+export const handleStripeWebhook = async (req: Request, res: Response) => {
+    const signature = req.headers['stripe-signature'] as string;
+  
+    if (!signature) {
+      throw new AppError('Missing stripe-signature header', 400, 'STRIPE_SIGNATURE_MISSING');
+    }
+  
+    await stripeService.handleStripeWebhook(req.body, signature);
+  
+    res.status(200).json({ received: true });
+  };

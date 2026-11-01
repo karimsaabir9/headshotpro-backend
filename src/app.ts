@@ -5,6 +5,7 @@ import { config } from "./config";
 import v1Routers from "./routes/v1";
 import { errorMiddleware } from "./middleware/error.middleware";
 import { errorResponse } from "./util/response";
+import ingestClient from "./routes/ingest.route";
 
 const app = express();
 
@@ -26,6 +27,19 @@ app.use(
   }),
 );
 
+// stripe middleware
+
+app.post('/api/v1/payment/webhook/stripe', express.raw({type: 'application/json'}) , async(req, res, next)=> {
+
+  try {
+      // TODO : Implement the stripe webhook
+      const  { handleStripeWebhook } = await import("./controllers/payment.controller");
+      await handleStripeWebhook(req, res);
+  } catch (error) {
+      next(error);
+  }
+})
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -40,7 +54,8 @@ app.get("/health", (req, res) => {
 // TODO: Routes
 
 app.use("/api/v1", v1Routers);
-
+// Inngest serve endpoint — must match the URL the Inngest dev server syncs (/api/inngest)
+app.use("/api/inngest", ingestClient);
 // TODO: 404 Route
 app.use((req, res) => {
   return errorResponse(res, "Route not found", 404, [
