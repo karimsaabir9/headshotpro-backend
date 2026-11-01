@@ -14,5 +14,7 @@ router.use(authenticate)
 // process payment
 router.post('/process', paymentController.processPayment);
 
+// get payment history
+router.get('/history', authenticate, paymentController.getPaymentHistory);
 
 export default router;

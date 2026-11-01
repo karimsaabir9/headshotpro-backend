@@ -3,6 +3,20 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const config = {
+  mobileWallet: {
+    merchantUid: process.env.MERCHANT_U_ID || "",
+    apiKey: process.env.MERCHANT_API_KEY || "",
+    apiUserId: process.env.MERCHANT_API_USER_ID || "",
+    apiEndpoint: process.env.MERCHANT_API_END_POINT || "",
+  },
+
+  ebir: {
+    merchantUid: process.env.EBIR_MERCHANT_U_ID || "",
+    apiKey: process.env.EBIR_MERCHANT_API_KEY || "",
+    apiUserId: process.env.EBIR_MERCHANT_API_USER_ID || "",
+    apiEndpoint: process.env.EBIR_MERCHANT_API_END_POINT || "",
+  },
+
   env: process.env.NODE_ENV || "development",
   port: process.env.PORT || 3000,
   database: {
@@ -33,7 +47,8 @@ export const config = {
     secretKey: process.env.STRIPE_SECRET_KEY || "",
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
   },
-  // Upstash Redis configuration (optional — Redis is disabled when missing)
+  // Redis configuration
+
   upstash: {
     url: process.env.UPSTASH_REDIS_REST_URL || "",
     token: process.env.UPSTASH_REDIS_REST_TOKEN || "",

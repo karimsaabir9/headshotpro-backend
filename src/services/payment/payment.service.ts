@@ -1,15 +1,25 @@
-import { config } from "@/config";
 import { CreditPackage, ICreditPackage, IOrder, Order, User } from "@/models";
 import {
+  MobileWalletConfig,
+  MobileWalletPayload,
+  MobileWalletResponse,
   PaymentPlatform,
+  PaymentRequest,
   PaymentResponse,
   PaymentStatus,
 } from "@/types/payment-types";
 import { AppError, NotFoundError } from "@/util/errors";
 import { logger } from "@/util/logger";
 import { stripeService } from "./stripe-service";
+import { triggerCreditAddition } from "../queue/queue.service";
+import { config } from "@/config";
+import axios from "axios";
+import { orderService } from "../orders/order.service";
 
 export class PaymentService {
+  // TO_DO: Implement the stripe service
+  // private stripeService: StripeService;
+
   // get All Credit Packages
 
   async getCreditPackages(): Promise<ICreditPackage[]> {
@@ -21,6 +31,7 @@ export class PaymentService {
       throw new AppError("Failed to get credit packages");
     }
   }
+
   //   get credit package by id
   async getCreditPackageById(id: string): Promise<ICreditPackage> {
     try {
@@ -32,6 +43,34 @@ export class PaymentService {
     } catch (error) {
       logger.error("Failed to get credit package by id", error);
       throw new AppError("Failed to get credit package by id");
+    }
+  }
+
+  //   create order
+
+  async createOrder(params: {
+    userId: string;
+    packageId: string;
+    amount: number;
+    credits: number;
+    platform: PaymentPlatform;
+    phone?: string;
+  }): Promise<IOrder> {
+    try {
+      const { userId, packageId, amount, credits, platform, phone } = params;
+
+      const order = await Order.create({
+        user: userId,
+        package: packageId,
+        amount,
+        credits,
+        platform,
+        phone,
+      });
+      return order;
+    } catch (error) {
+      logger.error("Failed to create order", error);
+      throw new AppError("Failed to create order");
     }
   }
 
@@ -75,8 +114,10 @@ export class PaymentService {
       order.status = PaymentStatus.PROCESSING;
       await order.save();
 
+      await orderService.invalidateOrdersCache();
+
       logger.info(
-        `Stripe checkout session created successfully for order ${order._id.toString()}`,
+        `Stripe checkout session created successfully for order ${order._id.toString()}`
       );
 
       return {
@@ -107,37 +148,12 @@ export class PaymentService {
       throw new AppError(
         `Failed to process Stripe payment: ${errorMessage}`,
         500,
-        "PROCESS_STRIPE_PAYMENT_ERROR",
+        "PROCESS_STRIPE_PAYMENT_ERROR"
       );
     }
   }
 
-  //   create order
-  async createOrder(params: {
-    userId: string;
-    packageId: string;
-    amount: number;
-    credits: number;
-    platform: PaymentPlatform;
-    phone?: string;
-  }): Promise<IOrder> {
-    try {
-      const { userId, packageId, amount, credits, platform, phone } = params;
-
-      const order = await Order.create({
-        user: userId,
-        package: packageId,
-        amount,
-        credits,
-        platform,
-        phone,
-      });
-      return order;
-    } catch (error) {
-      logger.error("Failed to create order", error);
-      throw new AppError("Failed to create order");
-    }
-  }
+  // process payment
 
   async processPayment(params: {
     userId: string;
@@ -151,7 +167,7 @@ export class PaymentService {
       const { userId, packageId, platform, phone, successUrl, cancelUrl } =
         params;
       logger.info(
-        `Processing payment for user ${userId} with package ${packageId} on platform ${platform}`,
+        `Processing payment for user ${userId} with package ${packageId} on platform ${platform}`
       );
 
       // get the credit package
@@ -186,10 +202,10 @@ export class PaymentService {
           userEmail,
         });
       } else if (platform === PaymentPlatform.LOCAL) {
-        //TODO: Implement the payment processing for the other platforms
+        // TO_DO: Implement the payment processing for the other platforms
         return {
           success: true,
-          message: "Payment processed successfully",
+          message: "Payment session created successfully",
           orderId: order._id.toString(),
           sessionId: undefined,
           redirectUrl: undefined,
@@ -202,22 +218,23 @@ export class PaymentService {
         platform === PaymentPlatform.ZAAD ||
         platform === PaymentPlatform.SAHAL
       ) {
-        // TODO: Implement the payment processing for the other platforms
-        return {
-          success: true,
-          message: "Payment processed successfully",
-          orderId: order._id.toString(),
-          sessionId: undefined,
-          redirectUrl: undefined,
-          amount: order.amount,
-          credits: totalCredits,
-          status: PaymentStatus.PROCESSING,
-        };
+        if (!phone) {
+          throw new AppError(
+            "Phone number is required",
+            400,
+            "PHONE_NUMBER_REQUIRED"
+          );
+        }
+        return await this.processMobileWalletPayment({
+          order,
+          platform,
+          phone,
+        });
       } else if (platform === PaymentPlatform.EBIR) {
-        // TODO: Implement the payment processing for the other platforms
+        // TO_DO: Implement the payment processing for the other platforms
         return {
           success: true,
-          message: "Payment processed successfully",
+          message: "Payment session created successfully",
           orderId: order._id.toString(),
           sessionId: undefined,
           redirectUrl: undefined,
@@ -229,13 +246,198 @@ export class PaymentService {
         throw new AppError(
           "Unsupported payment platform",
           400,
-          "UNSUPPORTED_PAYMENT_PLATFORM",
+          "UNSUPPORTED_PAYMENT_PLATFORM"
         );
       }
     } catch (error) {
       logger.error("Failed to process payment", error);
       throw new AppError("Failed to process payment");
     }
+  }
+
+  // Process mobile wallet payment
+
+  async processMobileWalletPayment(params: {
+    order: IOrder;
+    platform: PaymentPlatform;
+    phone: string;
+  }): Promise<PaymentResponse> {
+    try {
+      const { order, platform, phone } = params;
+
+      if (!phone) {
+        throw new AppError(
+          "Phone number is required",
+          400,
+          "PHONE_NUMBER_REQUIRED"
+        );
+      }
+
+      logger.info(
+        `Processing mobile wallet payment for order ${order._id.toString()} on platform ${platform} with phone ${phone}`
+      );
+
+      const config = await this.getMobileWalletConfig(platform);
+
+      if (
+        !config.merchantUid ||
+        !config.apiKey ||
+        !config.apiUserId ||
+        !config.apiEndpoint
+      ) {
+        logger.error(
+          `Mobile wallet configuration is not valid for platform ${platform}`
+        );
+        throw new AppError(
+          "Mobile wallet configuration is not valid",
+          400,
+          "INVALID_MOBILE_WALLET_CONFIGURATION"
+        );
+      }
+
+      const payload: MobileWalletPayload = {
+        schemaVersion: "1.0",
+        requestId: order._id.toString() + Date.now().toString(),
+        timestamp: Date.now(),
+        channelName: "WEB",
+        serviceName: "API_PURCHASE",
+        serviceParams: {
+          merchantUid: config.merchantUid,
+          paymentMethod: "MWALLET_ACCOUNT",
+          apiKey: config.apiKey,
+          apiUserId: config.apiUserId,
+          payerInfo: {
+            accountNo: phone,
+          },
+          transactionInfo: {
+            invoiceId: order._id.toString(),
+            referenceId: order._id.toString(),
+            amount: order.amount,
+            currency: "USD",
+            description: `Headshot Pro - ${order.credits} credits`,
+            platform,
+          },
+        },
+      };
+
+      logger.info(
+        `sending mobile wallet payload to the service ${config.apiEndpoint}`
+      );
+
+      const response = await axios.post<MobileWalletResponse>(
+        config.apiEndpoint,
+        payload
+      );
+      logger.info(`Mobile wallet response: ${JSON.stringify(response.data)}`);
+
+      // handle payment response
+      return await this.handleMobileWalletResponse(
+        response.data,
+        order,
+        platform
+      );
+    } catch (error) {
+      logger.error(
+        `Failed to process mobile wallet payment on platform ${params?.platform}`,
+        error
+      );
+      throw new AppError(
+        "Failed to process mobile wallet payment",
+        500,
+        "FAILED_TO_PROCESS_MOBILE_WALLET_PAYMENT"
+      );
+    }
+  }
+
+  async handleMobileWalletResponse(
+    response: MobileWalletResponse,
+    order: IOrder,
+    platform: PaymentPlatform
+  ): Promise<PaymentResponse> {
+    try {
+      const isSuccess =
+        response.responseCode === "2001" ||
+        response.responseMsg === "RCS_SUCCESS";
+
+      if (isSuccess) {
+        // update order status
+
+        console.log("response data", response);
+
+        order.status = PaymentStatus.PROCESSING;
+        order.transactionId = response.transactionId || response.referenceId;
+        await order.save();
+
+        // Queue credit addition
+        await this.handlePaymentSuccess(order._id.toString(), "LOCAL");
+
+        logger.info(
+          `Mobile wallet payment processed successfully for order ${order._id.toString()} on platform ${platform}`
+        );
+
+        return {
+          success: true,
+          message: "Mobile wallet payment processed successfully",
+          orderId: order._id.toString(),
+          transactionId: order.transactionId,
+          amount: order.amount,
+          credits: order.credits,
+          status: PaymentStatus.COMPLETED,
+        };
+      } else {
+        // update order status
+
+        order.status = PaymentStatus.FAILED;
+        await order.save();
+
+        logger.error(
+          `Mobile wallet payment failed for order ${order._id.toString()} on platform ${platform}`
+        );
+
+        return {
+          success: false,
+          message: "Mobile wallet payment failed",
+          orderId: order._id.toString(),
+          transactionId: order.transactionId,
+          amount: order.amount,
+          error: {
+            code: response.responseCode,
+            message: response.responseMsg,
+          },
+        };
+      }
+    } catch (error) {
+      logger.error(
+        `Failed to handle mobile wallet response for order ${order._id.toString()} on platform ${platform}`,
+        error
+      );
+      throw new AppError(
+        "Failed to handle mobile wallet response",
+        500,
+        "FAILED_TO_HANDLE_MOBILE_WALLET_RESPONSE"
+      );
+    }
+  }
+
+  async getMobileWalletConfig(
+    platform: PaymentPlatform
+  ): Promise<MobileWalletConfig> {
+    if (platform === PaymentPlatform.EBIR) {
+      return {
+        merchantUid: config.ebir.merchantUid,
+        apiKey: config.ebir.apiKey,
+        apiUserId: config.ebir.apiUserId,
+        apiEndpoint: config.ebir.apiEndpoint,
+      };
+    }
+
+    // EVC, ZAAD, SAHAL use the same configuration
+    return {
+      merchantUid: config.mobileWallet.merchantUid,
+      apiKey: config.mobileWallet.apiKey,
+      apiUserId: config.mobileWallet.apiUserId,
+      apiEndpoint: config.mobileWallet.apiEndpoint,
+    };
   }
 
   async handlePaymentSuccess(
@@ -282,6 +484,27 @@ export class PaymentService {
       );
     }
   }
+  // get payment history
+
+  async getPaymentHistory(params: {userId: string, limit: number}): Promise<IOrder[]> {
+
+    try {
+      const orders = await Order.find({ user: params.userId })
+      .populate("package")
+      .sort({ createdAt: -1 })
+      .limit(params.limit);
+
+      logger.info(`Payment history fetched successfully for user ${params.userId} with ${orders.length} orders`);
+
+      return orders;
+
+    } catch (error) {
+      logger.error(`Failed to get payment history for user ${params.userId}`, error);
+      throw new AppError("Failed to get payment history", 500, "INTERNAL_SERVER_ERROR");
+    }
+
+  }
+
 }
 
 export const paymentService = new PaymentService();
