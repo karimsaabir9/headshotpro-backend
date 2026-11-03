@@ -1,9 +1,9 @@
-import { Headshot } from "@/models";
-import { AppError } from "@/util/errors";
 import { logger } from "@/util/logger";
 import { HEADSHOT_STYLES, headshotService, HeadshotStyle } from "../headshot/hadshot.service";
-import { s3Service } from "../s3";
 import { inngestClient } from "./inngest-clients";
+import { Headshot } from "@/models";
+import { AppError } from "@/util/errors";
+import { s3Service } from "../s3";
 
 export interface GenerateHeadshotEventData {
   headshotId: string;
@@ -86,7 +86,7 @@ export const createGenerateHeadshotFunction = () => {
               styleToProcess.map(async (style) => {
                 try {
                   logger.info(`Processing style ${style}`);
-
+ 
                   // replicate service
                   const result = await headshotService.generateHeadshot({
                     imageUrl: originalPhotoUrl,
