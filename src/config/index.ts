@@ -52,7 +52,7 @@ export const config = {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
     bucketName: process.env.AWS_BUCKET_NAME || "",
-    region: process.env.AWS_REGION || "",
+    region: process.env.AWS_REGION || "us-east-1",
     version: process.env.AWS_VERSION || "2010-12-01",
   },
   // Replicate configuration
