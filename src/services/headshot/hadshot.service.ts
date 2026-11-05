@@ -1,7 +1,7 @@
 import { config } from "@/config";
 import { AppError } from "@/util/errors";
 import { logger } from "@/util/logger";
-import Replicate from "replicate";
+import OpenAI, { toFile } from "openai";
 
 export const HEADSHOT_STYLES = {
   professional: {
@@ -55,14 +55,23 @@ export interface GenerateHeadshotResult {
 }
 
 export class HeadshotService {
-  // replicate client constructor
+  // OpenAI client (image generation) — created lazily so a missing API key
+  // doesn't crash the app at startup (only when a headshot is generated).
 
-  private client: Replicate;
+  private client: OpenAI | null = null;
 
-  constructor() {
-    this.client = new Replicate({
-      auth: config.replicate.apiKey,
-    });
+  private getClient(): OpenAI {
+    if (!this.client) {
+      if (!config.openai.apiKey) {
+        throw new AppError(
+          "OpenAI API key is not configured",
+          500,
+          "OPENAI_NOT_CONFIGURED"
+        );
+      }
+      this.client = new OpenAI({ apiKey: config.openai.apiKey });
+    }
+    return this.client;
   }
 
   getAvailableStyles = (): Array<{
@@ -95,36 +104,46 @@ export class HeadshotService {
 
       const startTime = Date.now();
 
-      // replicate service
+      // Fetch the original photo and turn it into a file for the edit request
+      const inputResponse = await fetch(imageUrl);
+      if (!inputResponse.ok) {
+        throw new AppError(
+          "Failed to fetch the original photo",
+          400,
+          "FAILED_TO_FETCH_PHOTO"
+        );
+      }
+      const inputBuffer = Buffer.from(await inputResponse.arrayBuffer());
+      const inputFile = await toFile(inputBuffer, "input.png", {
+        type: "image/png",
+      });
 
-      // prepare the payload for replicate
+      logger.info(`Calling OpenAI image edit for style ${style}`);
 
-      const inputParams = {
+      // call OpenAI image edit
+      // Model: gpt-image-1-mini is the cheapest image-edit model (gpt-image-1
+      // was retired). For better quality switch to "gpt-image-2" or newer.
+      const output = await this.getClient().images.edit({
+        model: "gpt-image-1-mini",
+        image: inputFile,
         prompt: promptToUse,
-        image_input: [imageUrl],
-        resolution: "1K",
-        aspect_ratio: "1:1",
-        output_format: "png",
-        safety_filter_level: "block_only_high",
-      };
-
-      logger.info(`Prepared input parameters for replicate`, inputParams);
-
-      // call the replicate service
-
-      const output = await this.client.run("google/nano-banana-pro", {
-        input: inputParams,
+        size: "1024x1024",
+        quality: "low", // keep cost low; raise to "medium"/"high" for better quality
       });
 
       const generatedTime = Date.now() - startTime;
-      logger.info(`Replicate service call completed in ${generatedTime}ms`);
-      const generatedImageUrl = (output as any).url();
+      logger.info(`OpenAI image generation completed in ${generatedTime}ms`);
 
-      if(!generatedImageUrl) {
+      const b64 = output.data?.[0]?.b64_json;
+
+      if (!b64) {
         throw new AppError("Failed to generate headshot", 500, "FAILED_TO_GENERATE_HEADSHOT");
       }
 
-      logger.info(`Generated headshot image url: ${generatedImageUrl}`);
+      // Return as a data URL; the storage layer converts it to a Buffer and uploads it.
+      const generatedImageUrl = `data:image/png;base64,${b64}`;
+
+      logger.info(`Generated headshot for style ${style}`);
 
       return {
         imageUrl: generatedImageUrl,
@@ -134,7 +153,7 @@ export class HeadshotService {
 
     } catch (error : any) {
         const errorPrompt = params.prompt?.trim() || HEADSHOT_STYLES[params.style].prompt;
-        logger.error('Failed to generate headshot with Replicate:', {
+        logger.error('Failed to generate headshot with OpenAI:', {
           error: error?.message || error,
           errorCode: error?.code,
           errorType: error?.type,
@@ -142,12 +161,7 @@ export class HeadshotService {
           imageUrl: params.imageUrl,
           prompt: typeof errorPrompt === 'string' ? errorPrompt.substring(0, 100) : 'N/A',
         });
-        
-        // Provide more helpful error messages
-        if (error?.message?.includes('invalid') || error?.code === 'E006') {
-          throw new Error(`Invalid input parameters for Replicate API. Please check image URL is accessible and parameters are correct. Original error: ${error.message}`);
-        }
-        
+
         throw new Error(`Failed to generate ${params.style} headshot: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
   }

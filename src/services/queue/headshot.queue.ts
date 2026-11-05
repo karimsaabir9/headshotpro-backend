@@ -86,20 +86,38 @@ export const createGenerateHeadshotFunction = () => {
               styleToProcess.map(async (style) => {
                 try {
                   logger.info(`Processing style ${style}`);
- 
-                  // replicate service
+
+                  // 1) Generate the headshot (OpenAI returns a base64 data URL)
                   const result = await headshotService.generateHeadshot({
                     imageUrl: originalPhotoUrl,
                     style,
                     prompt,
                   });
 
-                  logger.info(`Generated headshot for style ${style}`, result);
+                  // 2) Upload to storage right away. The generated image is a
+                  //    large base64 data URL; uploading here means only the small
+                  //    storage URL travels between Inngest steps (avoids the
+                  //    "request entity too large" 413 on the step callback).
+                  const imageBuffer = await s3Service.downloadFromUrl(
+                    result.imageUrl
+                  );
+                  const uploadResult = await s3Service.uploadGeneratedHeadshot(
+                    userId,
+                    imageBuffer,
+                    style,
+                    "image/png"
+                  );
+
+                  logger.info(
+                    `Generated and uploaded headshot for style ${style}`,
+                    { url: uploadResult.url }
+                  );
 
                   return {
                     style,
                     status: "succeeded",
-                    outputUrl: result.imageUrl,
+                    url: uploadResult.url,
+                    key: uploadResult.key,
                   };
                 } catch (error) {
                   logger.error(
@@ -124,62 +142,27 @@ export const createGenerateHeadshotFunction = () => {
 
         // step 3: Upload generated headshots to s3 cloud
 
+        // Step 3: collect the uploaded headshots. The upload already happened
+        // in step 2 (to keep step outputs small), so here we just gather the
+        // successful results into the final shape.
         const uploadedHeadshots = await step.run("upload-to-s3", async () => {
-          // upload the headshots to s3 cloud
-
           const successfulHeadshots = generatedHeadshots.filter(
             (h: any) => h.status === "succeeded"
-          ) as Array<{ style: string; status: "succeeded"; outputUrl: string }>;
+          ) as Array<{
+            style: string;
+            status: "succeeded";
+            url: string;
+            key: string;
+          }>;
 
-          const uplods = await Promise.all(
-            successfulHeadshots.map(async (headshot) => {
-              try {
-                // Download the headshot from the Replicate output urlconst
+          const uploads = successfulHeadshots.map((headshot) => ({
+            style: headshot.style,
+            url: headshot.url,
+            key: headshot.key,
+          }));
 
-                const imageBuffer = await s3Service.downloadFromUrl(
-                  headshot.outputUrl
-                );
-
-                logger.info(
-                  `Downloaded headshot from Replicate output url ${headshot.outputUrl}`
-                );
-
-                // Upload the headshot to s3 cloud
-
-                const uploadResult = await s3Service.uploadGeneratedHeadshot(
-                  userId,
-                  imageBuffer,
-                  headshot.style,
-                  "image/png"
-                );
-
-                logger.info(
-                  `Uploaded headshot to s3 cloud for style ${headshot.style}`,
-                  uploadResult
-                );
-
-                return {
-                  style: headshot.style,
-                  url: uploadResult.url,
-                  key: uploadResult.key,
-                };
-              } catch (error) {
-                logger.error(
-                  `❌ Failed to upload headshot to s3 cloud for style ${headshot.style}:`,
-                  error
-                );
-                return null;
-              }
-            })
-          );
-
-          logger.info(
-            `Uploaded ${uplods.length} headshots to s3 cloud`,
-            uplods
-          );
-          return uplods.filter(
-            (u): u is { style: string; url: string; key: string } => u !== null
-          );
+          logger.info(`Uploaded ${uploads.length} headshots to storage`);
+          return uploads;
         });
 
         // step 4: update the headshot document with the uploaded headshots

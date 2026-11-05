@@ -1,22 +1,15 @@
 import { config } from "@/config";
 import { AppError, ExternalServiceError } from "@/util/errors";
 import { logger } from "@/util/logger";
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl as generateSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { v2 as cloudinary } from "cloudinary";
 
 import crypto from "crypto";
 
-const s3Client = new S3Client({
-  region: config.aws.region,
-  credentials: {
-    accessKeyId: config.aws.accessKeyId,
-    secretAccessKey: config.aws.secretAccessKey,
-  },
+cloudinary.config({
+  cloud_name: config.cloudinary.cloudName,
+  api_key: config.cloudinary.apiKey,
+  api_secret: config.cloudinary.apiSecret,
+  secure: true,
 });
 
 export interface UploadResult {
@@ -25,68 +18,68 @@ export interface UploadResult {
   bucket: string;
 }
 
+// Storage service backed by Cloudinary. The class name and `s3Service` export
+// are kept for backwards compatibility with existing imports.
 export class S3Service {
-  private bucketName: string;
+  private cloudName: string;
 
   constructor() {
-    this.bucketName = config.aws.bucketName;
+    this.cloudName = config.cloudinary.cloudName;
   }
 
-  private generateUniqueKey(
-    userId: string,
-    prefix: string,
-    extension: string
-  ): string {
+  private generateUniqueId(userId: string, prefix: string): string {
     const timestamp = Date.now();
     const randomString = crypto.randomBytes(8).toString("hex");
-    return `${prefix}/${userId}/${timestamp}-${randomString}.${extension}`;
+    return `${prefix}/${userId}/${timestamp}-${randomString}`;
   }
 
-  // upload original photo to s3 cloud
+  private async uploadBuffer(
+    fileBuffer: Buffer,
+    publicId: string,
+    mimeType: string,
+    context: Record<string, string> = {}
+  ): Promise<UploadResult> {
+    const dataUri = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
 
+    const result = await cloudinary.uploader.upload(dataUri, {
+      public_id: publicId,
+      resource_type: "image",
+      overwrite: true,
+      context,
+    });
+
+    return {
+      url: result.secure_url,
+      key: result.public_id,
+      bucket: this.cloudName,
+    };
+  }
+
+  // upload original photo
   async uploadOriginalPhoto(
     userId: string,
     fileBuffer: Buffer,
     mimeType: string
   ): Promise<UploadResult> {
     try {
-      const extension = mimeType.split("/")[1] || "jpg";
-      const key = this.generateUniqueKey(userId, "originals", extension);
-
-      const command = new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: key,
-        Body: fileBuffer,
-        ContentType: mimeType,
-        Metadata: {
-          userId,
-          uploadedAt: new Date().toISOString(),
-        },
+      const publicId = this.generateUniqueId(userId, "headshots/originals");
+      const result = await this.uploadBuffer(fileBuffer, publicId, mimeType, {
+        userId,
+        uploadedAt: new Date().toISOString(),
       });
 
-      await s3Client.send(command);
-
-      const url = `https://${this.bucketName}.s3.${config.aws.region}.amazonaws.com/${key}`;
-
-      logger.info(`Uploaded original photo to s3 cloud`, {
-        key,
-        url,
-      });
-
-      return {
-        url,
-        key,
-        bucket: this.bucketName,
-      };
-    } catch (error: any) {
-      logger.error(`Failed to upload original photo to s3 cloud`, error);
+      logger.info(`Uploaded original photo to Cloudinary`, result);
+      return result;
+    } catch (error) {
+      logger.error(`Failed to upload original photo to Cloudinary`, error);
       throw new ExternalServiceError(
-        "S3",
-        `Failed to upload original photo to s3 cloud`
+        "Cloudinary",
+        `Failed to upload original photo`
       );
     }
   }
 
+  // upload a generated headshot
   async uploadGeneratedHeadshot(
     userId: string,
     fileBuffer: Buffer,
@@ -94,131 +87,73 @@ export class S3Service {
     mimeType: string = "image/png"
   ): Promise<UploadResult> {
     try {
-      const extension = mimeType.split("/")[1] || "png";
-      const key = this.generateUniqueKey(
+      const publicId = this.generateUniqueId(
         userId,
-        `generated/${style}`,
-        extension
+        `headshots/generated/${style}`
       );
-
-      const command = new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: key,
-        Body: fileBuffer,
-        ContentType: mimeType,
-        Metadata: {
-          userId,
-          style,
-          generatedAt: new Date().toISOString(),
-        },
+      const result = await this.uploadBuffer(fileBuffer, publicId, mimeType, {
+        userId,
+        style,
+        generatedAt: new Date().toISOString(),
       });
 
-      await s3Client.send(command);
-
-      const url = `https://${this.bucketName}.s3.${config.aws.region}.amazonaws.com/${key}`;
-
-      logger.info(`Generated headshot uploaded to S3: ${key}`);
-
-      return {
-        url,
-        key,
-        bucket: this.bucketName,
-      };
+      logger.info(`Generated headshot uploaded to Cloudinary: ${result.key}`);
+      return result;
     } catch (error) {
-      logger.error("Failed to upload generated headshot to S3:", error);
+      logger.error("Failed to upload generated headshot to Cloudinary:", error);
       throw new Error("Failed to upload generated headshot to storage");
     }
   }
 
-  // Generate Signed URL for the original photo
-  async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
-    try {
-      // validate the key
-      if (!key || key.trim() === "") {
-        logger.error(`Invalid signed url key`);
-        throw new AppError("Invalid signed url key", 400);
-      }
-
-      const command = new GetObjectCommand({
-        Bucket: this.bucketName,
-        Key: key,
-      });
-
-      const signedUrl = await generateSignedUrl(s3Client, command, {
-        expiresIn,
-      });
-
-      logger.info(`Generated signed url for the original photo`, {
-        key,
-        signedUrl,
-      });
-
-      return signedUrl;
-    } catch (error) {
-      logger.error(`Failed to generate signed url for the original photo`);
-      throw new ExternalServiceError(
-        "S3",
-        `Failed to generate signed url for the original photo`
-      );
+  // Cloudinary assets are public CDN URLs, so this returns the delivery URL for
+  // the given public_id. The expiresIn arg is kept for signature compatibility.
+  async getSignedUrl(key: string, _expiresIn: number = 3600): Promise<string> {
+    if (!key || key.trim() === "") {
+      logger.error(`Invalid url key`);
+      throw new AppError("Invalid url key", 400);
     }
+    return cloudinary.url(key, { secure: true, resource_type: "image" });
   }
 
+  // Download an image from a URL (or a data: URI) into a Buffer.
   async downloadFromUrl(url: string): Promise<Buffer> {
     try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.statusText}`);
+      if (url.startsWith("data:")) {
+        const base64 = url.split(",")[1] ?? "";
+        return Buffer.from(base64, "base64");
       }
 
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to download image: ${response.status}`);
+      }
       const arrayBuffer = await response.arrayBuffer();
       return Buffer.from(arrayBuffer);
     } catch (error) {
-      logger.error("Failed to download file from URL:", error);
-      throw new Error("Failed to download file");
+      logger.error(`Failed to download image from url`, error);
+      throw new ExternalServiceError("Cloudinary", `Failed to download image`);
     }
   }
 
+  // delete a single asset by its public_id
   async deleteFile(key: string): Promise<void> {
-    // validate the key
-    if (!key || key.trim() === "") {
-      logger.error(`Invalid key to delete`);
-      throw new AppError("Invalid key to delete", 400);
-    }
-
     try {
-      const command = new DeleteObjectCommand({
-        Bucket: this.bucketName,
-        Key: key,
-      });
-
-      await s3Client.send(command);
-
-      logger.info(`Deleted file from s3 cloud`, {
-        key,
-      });
+      await cloudinary.uploader.destroy(key, { resource_type: "image" });
+      logger.info(`Deleted asset from Cloudinary: ${key}`);
     } catch (error) {
-      logger.error(`Failed to delete file from s3 cloud`, error);
-      throw new ExternalServiceError(
-        "S3",
-        "Failed to delete file from s3 cloud"
-      );
+      logger.error(`Failed to delete asset from Cloudinary: ${key}`, error);
+      throw new ExternalServiceError("Cloudinary", `Failed to delete asset`);
     }
   }
 
+  // delete multiple assets
   async deleteFiles(keys: string[]): Promise<void> {
+    if (!keys || keys.length === 0) return;
     try {
-      const deletePromises = keys.map((key) => this.deleteFile(key));
-      await Promise.all(deletePromises);
-
-      logger.info(`Deleted ${keys.length} files from s3 cloud`, {
-        keys,
-      });
+      await Promise.all(keys.map((key) => this.deleteFile(key)));
     } catch (error) {
-      logger.error(`Failed to delete keys from s3 cloud`, error);
-      throw new ExternalServiceError(
-        "S3",
-        "Failed to delete keys from s3 cloud"
-      );
+      logger.error(`Failed to delete assets from Cloudinary`, error);
+      throw new ExternalServiceError("Cloudinary", `Failed to delete assets`);
     }
   }
 }
