@@ -7,10 +7,16 @@ import {
   verifyEmailSchema,
 } from "@/validators/auth.validator";
 import { authenticate, validate, validateQuery } from "@/middleware";
+import { authRateLimitConfig } from "@/middleware/rateLimit";
 
 const authRouter = Router();
 
-authRouter.post("/register", validate(registerSchema), authController.register);
+authRouter.post(
+  "/register",
+  authRateLimitConfig.register,
+  validate(registerSchema),
+  authController.register,
+);
 authRouter.get(
   "/verify-email",
   validateQuery(verifyEmailSchema),
@@ -23,10 +29,15 @@ authRouter.post(
   authController.resendVerificationEmail,
 );
 
-authRouter.post("/login", validate(loginSchema), authController.login);
+authRouter.post(
+  "/login",
+  authRateLimitConfig.login,
+  validate(loginSchema),
+  authController.login,
+);
 
-authRouter.get("/me", authenticate, authController.getCurrentUser)
-authRouter.post('/refresh-token', authController.refreshToken)
-authRouter.post('/logout', authenticate, authController.logout)
+authRouter.get("/me", authenticate, authController.getCurrentUser);
+authRouter.post("/refresh-token", authController.refreshToken);
+authRouter.post("/logout", authenticate, authController.logout);
 
 export default authRouter;

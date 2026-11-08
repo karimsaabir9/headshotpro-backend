@@ -24,7 +24,7 @@
     "typescript": "^7"
   },
   "dependencies": {
-    "@upstash/redis": "^1.40.0",
+    "@upstash/redis": "^1.41.0",
     "axios": "^1.21.0",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.11.0",

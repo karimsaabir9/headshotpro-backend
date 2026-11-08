@@ -6,6 +6,7 @@ import v1Routers from "./routes/v1";
 import { errorMiddleware } from "./middleware/error.middleware";
 import { errorResponse } from "./util/response";
 import ingestClient from "./routes/ingest.route";
+import { apiRateLimitConfig } from "./middleware/rateLimit";
 
 const app = express();
 
@@ -44,7 +45,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-app.get("/health", (req, res) => {
+app.get("/health", apiRateLimitConfig.general, (req, res, next) => {
   res.json({
     status: "ok",
     timeStamp: new Date().toISOString(),
