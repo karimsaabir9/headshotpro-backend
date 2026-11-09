@@ -121,10 +121,10 @@ export class HeadshotService {
       logger.info(`Calling OpenAI image edit for style ${style}`);
 
       // call OpenAI image edit
-      // Model: gpt-image-1-mini is the cheapest image-edit model (gpt-image-1
-      // was retired). For better quality switch to "gpt-image-2" or newer.
+      // Model: gpt-image-2 for higher-quality headshots (costs more than the
+      // -mini variant). Drop back to "gpt-image-1-mini" to cut cost.
       const output = await this.getClient().images.edit({
-        model: "gpt-image-1-mini",
+        model: "gpt-image-2",
         image: inputFile,
         prompt: promptToUse,
         size: "1024x1024",
