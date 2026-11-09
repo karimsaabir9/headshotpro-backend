@@ -91,13 +91,15 @@ export const getCurrentUser = async (req: Request, res: Response) => {
   const user = await authService.getCurrentUser(req.user?.userId as string);
 
   return successResponse(res, "User fetched successfully", {
-    user: { 
+    user: {
       id: user._id,
       email: user.email,
       name: user.name,
       role: user.role,
       credits: user.credits,
       isEmailVerified: user.isEmailVerified,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
     },
   });
 };
