@@ -205,7 +205,7 @@ export const createGenerateHeadshotFunction = () => {
           await Headshot.findByIdAndUpdate(headshotId, {
             status: "completed",
             generatedHeadshots: uploadedHeadshots.map((h: any) => ({
-              styles: h.style,
+              style: h.style,
               url: h.url,
               key: h.key,
               createdAt: new Date(),
